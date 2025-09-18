@@ -1,0 +1,108 @@
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation
+from datetime import datetime, timedelta
+
+# Step 1: Load Real Data OR Use Sample (Uncomment pd.read_csv for real file)
+# df = pd.read_csv('china_autumn_birds.csv')  # For real eBird/Movebank CSV
+
+# Built-in Sample Data: Realistic autumn 2024 sightings/tracks (Thrush & Gull, Sep-Nov)
+# Based on eBird Beidaihe peaks & Movebank Qinghai southward paths
+np.random.seed(42)
+num_obs = 500
+start_date = datetime(2024, 9, 1)
+dates = pd.date_range(start_date, periods=num_obs, freq='D')[:num_obs]
+lat_start = np.random.normal(39.8, 2, num_obs)  # Beidaihe/Qinghai north
+lon_start = np.random.normal(116, 5, num_obs)   # Eastern China
+progress = np.linspace(0, 1, num_obs)           # Southward migration
+df = pd.DataFrame({
+    'timestamp': np.random.choice(dates, num_obs),
+    'latitude': lat_start - (progress * 10) + np.random.normal(0, 0.5, num_obs),  # To ~29°N
+    'longitude': lon_start + np.random.normal(0, 1, num_obs),
+    'scientific_name': np.random.choice(['Turdus obscurus', 'Chroicocephalus brunnicephalus'], num_obs),
+    'individual_count': np.random.randint(1, 200, num_obs),
+    'observation_date': pd.Series(np.random.choice(dates, num_obs)).dt.strftime('%Y-%m-%d')
+})
+df['bird_id'] = df['scientific_name'].astype('category').cat.codes
+df = df.sort_values('timestamp').reset_index(drop=True)
+
+# For real data: Standardize columns (uncomment/adjust)
+# if 'observation_date' in df.columns:
+#     df['timestamp'] = pd.to_datetime(df['observation_date'])
+#     df['bird_id'] = df['scientific_name'].astype('category').cat.codes
+#     df['count'] = df['individual_count'].fillna(1)
+# else:  # Movebank
+#     df['timestamp'] = pd.to_datetime(df['timestamp'])
+#     df['latitude'] = df['location_lat']
+#     df['longitude'] = df['location_long']
+#     df['bird_id'] = df['individual_local_identifier']
+#     df['count'] = 1
+# df = df[df['timestamp'].dt.month.isin([9, 10, 11])]
+# df = df.dropna(subset=['latitude', 'longitude', 'timestamp'])
+# df = df.sample(n=min(1000, len(df)), random_state=42).sort_values('timestamp')
+
+print("Data Preview (Sample or Real):")
+print(df[['timestamp', 'bird_id', 'latitude', 'longitude', 'individual_count']].head())
+
+# Step 2: Figure Setup
+fig, ax = plt.subplots(figsize=(12, 8))
+ax.set_xlim(95, 125)   # Broader China lon (Qinghai to east coast)
+ax.set_ylim(22, 45)    # Lat range
+ax.set_xlabel('Longitude')
+ax.set_ylabel('Latitude')
+ax.set_title('Autumn Bird Migration in China (Real/Sample Data)')
+ax.grid(True, alpha=0.3)
+
+# Labels for context
+ax.text(100, 37, 'Qinghai Lake', fontsize=9, alpha=0.7)
+ax.text(119, 40, 'Beidaihe', fontsize=9, alpha=0.7)
+ax.text(116, 29, 'Poyang Lake', fontsize=9, alpha=0.7)
+
+# Step 3: Animation Function
+def animate(frame):
+    ax.clear()
+    ax.set_xlim(95, 125)
+    ax.set_ylim(22, 45)
+    ax.set_xlabel('Longitude')
+    ax.set_ylabel('Latitude')
+    ax.set_title(f'Autumn Migration Progress - {df.iloc[frame]["timestamp"].strftime("%Y-%m-%d")}')
+    ax.grid(True, alpha=0.3)
+    ax.text(100, 37, 'Qinghai Lake', fontsize=9, alpha=0.7)
+    ax.text(119, 40, 'Beidaihe', fontsize=9, alpha=0.7)
+    ax.text(116, 29, 'Poyang Lake', fontsize=9, alpha=0.7)
+    
+    current_df = df.iloc[:frame+1]
+    
+    # Faded trails per species (bird_id)
+    for bid in current_df['bird_id'].unique():
+        bird_data = current_df[current_df['bird_id'] == bid].sort_values('timestamp')
+        if len(bird_data) > 1:
+            ax.plot(bird_data['longitude'], bird_data['latitude'], alpha=0.4, linewidth=1.5, 
+                    color=plt.cm.tab10(bid / df['bird_id'].nunique()))
+    
+    # Current positions: Aggregated by species, sized by count
+    agg_current = current_df.groupby('bird_id').agg({
+        'longitude': 'last', 'latitude': 'last', 'individual_count': 'sum'
+    }).reset_index()
+    scatter = ax.scatter(agg_current['longitude'], agg_current['latitude'], 
+                         c=agg_current['bird_id'], cmap='tab10', 
+                         s=np.clip(agg_current['individual_count'] * 2, 20, 200),  # Scaled size
+                         edgecolors='black', linewidth=0.5, alpha=0.9, zorder=5)
+    
+    # Labels
+    species_map = {0: 'Eyebrowed Thrush', 1: 'Brown-headed Gull'}
+    for i, row in agg_current.iterrows():
+        label = species_map.get(row['bird_id'], f'Species {row["bird_id"]}')
+        ax.annotate(f'{label}\n({int(row["individual_count"])} birds)', 
+                    (row['longitude'], row['latitude']),
+                    xytext=(3, 3), textcoords='offset points', fontsize=7, ha='left')
+
+# Step 4: Run Animation
+total_frames = len(df)
+anim = FuncAnimation(fig, animate, frames=total_frames, interval=150, repeat=True, blit=False)
+
+plt.tight_layout()
+plt.show()
+
+# Save GIF: anim.save('china_autumn_migration.gif', writer='pillow', fps=8)
