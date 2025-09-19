@@ -105,4 +105,5 @@ anim = FuncAnimation(fig, animate, frames=total_frames, interval=150, repeat=Tru
 plt.tight_layout()
 plt.show()
 
+
 # Save GIF: anim.save('china_autumn_migration.gif', writer='pillow', fps=8)
